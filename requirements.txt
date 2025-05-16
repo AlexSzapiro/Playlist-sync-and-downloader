@@ -1,0 +1,4 @@
+spotipy
+rapidfuzz
+unidecode
+python-dotenv
