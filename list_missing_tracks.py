@@ -68,7 +68,20 @@ def get_local_track_names(folder_path: str) -> List[Tuple[str, str]]:
 
 def format_spotify_track(artists: List[str], title: str) -> str:
     # Remove (Original Mix) / (Extended Mix)
-    title_clean = re.sub(r'\((Original Mix|Extended Mix)\)', '', title, flags=re.IGNORECASE).strip()
+    # title_clean = re.sub(r'\((Original Mix|Extended Mix)\)', '', title, flags=re.IGNORECASE).strip()
+    # title_clean = re.sub(r'\((Original Mix|Extended Mix)\)', '', title, flags=re.IGNORECASE)
+    # title_clean = re.sub(r'\b(Original Mix|Extended Mix)\b', '', title_clean, flags=re.IGNORECASE)
+    # title_clean = re.sub(r'\s{2,}', ' ', title_clean).strip()
+
+    # Remove only (Original Mix) and (Extended Mix)
+    title_clean = re.sub(r'\((Original Mix|Extended Mix)\)', '', title, flags=re.IGNORECASE)
+    title_clean = re.sub(r'\b(Original Mix|Extended Mix)\b', '', title_clean, flags=re.IGNORECASE)
+
+    # Remove any stray dash at the end (e.g. "Title -")
+    title_clean = re.sub(r'\s*-\s*$', '', title_clean)
+
+    # Final whitespace normalization
+    title_clean = re.sub(r'\s{2,}', ' ', title_clean).strip()
 
     # Convert dash remix to parentheses
     if ' - ' in title_clean and '(' not in title_clean:

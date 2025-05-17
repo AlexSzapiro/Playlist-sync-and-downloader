@@ -12,6 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from difflib import SequenceMatcher
 import difflib
+import unidecode
 
 # === CONFIGURATION ===
 load_dotenv()
@@ -20,6 +21,7 @@ PASSWORD = os.getenv("FUVI_PASSWORD")
 PLAYLIST_NAME = "Z"
 TRACK_LIST_FILE = "logs/missing_tracks.txt"
 FUVI_URL = "https://music.fuvi-clan.com"
+CONFIDENCE_THRESHOLD = 0.85
 
 # === DRIVER SETUP ===
 def create_driver():
@@ -68,6 +70,7 @@ def ensure_playlist_exists(driver, playlist_name):
 
 # === TEXT UTILS ===
 def normalize_text(text, remove_suffix=False):
+    text = unidecode.unidecode(text)  # normalize accents
     text = text.lower()
     text = text.replace("&", "and").replace("’", "'").replace("‘", "'").replace("´", "'").replace("`", "'")
     if remove_suffix:
@@ -150,7 +153,7 @@ def search_and_add_track(driver, track_name, playlist_name, verbose=True):
             except Exception as e:
                 print(f"⚠️ Error reading result #{idx+1}: {e}")
 
-        if not best_match or best_score < 0.92:
+        if not best_match or best_score < CONFIDENCE_THRESHOLD:
             print("❌ No suitable match found.")
             return False
 
