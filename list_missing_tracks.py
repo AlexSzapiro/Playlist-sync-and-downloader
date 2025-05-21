@@ -67,12 +67,6 @@ def get_local_track_names(folder_path: str) -> List[Tuple[str, str]]:
 
 
 def format_spotify_track(artists: List[str], title: str) -> str:
-    # Remove (Original Mix) / (Extended Mix)
-    # title_clean = re.sub(r'\((Original Mix|Extended Mix)\)', '', title, flags=re.IGNORECASE).strip()
-    # title_clean = re.sub(r'\((Original Mix|Extended Mix)\)', '', title, flags=re.IGNORECASE)
-    # title_clean = re.sub(r'\b(Original Mix|Extended Mix)\b', '', title_clean, flags=re.IGNORECASE)
-    # title_clean = re.sub(r'\s{2,}', ' ', title_clean).strip()
-
     # Remove only (Original Mix) and (Extended Mix)
     title_clean = re.sub(r'\((Original Mix|Extended Mix)\)', '', title, flags=re.IGNORECASE)
     title_clean = re.sub(r'\b(Original Mix|Extended Mix)\b', '', title_clean, flags=re.IGNORECASE)
@@ -88,26 +82,26 @@ def format_spotify_track(artists: List[str], title: str) -> str:
         title_parts = title_clean.split(' - ', 1)
         title_clean = f"{title_parts[0].strip()} ({title_parts[1].strip()})"
 
-    # Detect remixers in title
+    # Detect remixers
     remix_match = re.search(r'\((.+? Remix.*?)\)', title_clean, flags=re.IGNORECASE)
     if remix_match:
-        remixers_raw = remix_match.group(1)  # e.g., "Kabi (AR) Remix"
-        remixers_clean = remixers_raw.replace(' Remix', '').strip()
-        # Normalize + strip parentheses for comparison
-        remixers_list = [normalize_text(re.sub(r'[()]', '', name.strip())) for name in remixers_clean.split('&')]
+        remixers_raw = remix_match.group(1).replace(' Remix', '').strip()
+        remixers_split = re.split(r' and |, | & ', remixers_raw)
+        remixers_list = [normalize_text(r) for r in remixers_split]
     else:
         remixers_list = []
 
+    #Filter out remixers from artists
     final_artists = []
     for a in artists:
-        norm_a = normalize_text(re.sub(r'[()]', '', a))
+        norm_a = normalize_text(a)
         if norm_a not in remixers_list:
             final_artists.append(a)
 
     # Final formatting
-    title_clean = re.sub(r'\s{2,}', ' ', title_clean).strip()
     artist_str = ', '.join(final_artists)
     return f"{artist_str} - {title_clean}"
+
 
 def fetch_spotify_playlist_tracks(playlist_url: str, client_id: str, client_secret: str) -> List[str]:
     sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))

@@ -69,6 +69,9 @@ def ensure_playlist_exists(driver, playlist_name):
         input(f"🔧 Create playlist '{playlist_name}' manually, then press Enter to continue...")
 
 # === TEXT UTILS ===
+def sanitize_artist_name(name):
+    return re.sub(r'\((ofc|be|uk|us|fr|it|ca|au|de)\)', '', name, flags=re.IGNORECASE).strip()
+
 def normalize_text(text, remove_suffix=False):
     text = unidecode.unidecode(text)  # normalize accents
     text = text.lower()
@@ -116,8 +119,10 @@ def search_and_add_track(driver, track_name, playlist_name, verbose=True):
         )
 
         has_suffix = bool(re.search(r"\((original|extended|edit|club|radio|remix)", track_name.lower()))
+
         target_artists = track_name.split(" - ")[0] if " - " in track_name else ""
         target_title = track_name.split(" - ")[1] if " - " in track_name else ""
+        
         target_perms = generate_artist_permutations(target_artists)
         search_variants = [
             normalize_text(f"{perm} - {target_title}", remove_suffix=not has_suffix)
@@ -133,7 +138,7 @@ def search_and_add_track(driver, track_name, playlist_name, verbose=True):
                 title = title_el.text.strip()
 
                 artists_el = block.find_elements(By.XPATH, ".//ul[contains(@class, 'list_virgule')]//a")
-                artists = ", ".join(a.text.strip() for a in artists_el)
+                artists = ", ".join(sanitize_artist_name(a.text.strip()) for a in artists_el)
 
                 full_title = f"{artists} - {title}"
                 result_string = normalize_text(full_title, remove_suffix=not has_suffix)
@@ -228,3 +233,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # driver = create_driver()
+    # login(driver)
+    # ensure_playlist_exists(driver, PLAYLIST_NAME)
+    # search_and_add_track(driver, "El Mundo, Zazou - Like Forever (Hernan Cattaneo and Kevin Di Serna Remix)", PLAYLIST_NAME)
+    # search_and_add_track(driver, "FKA twigs - Eusexua (Anyma Remix)", PLAYLIST_NAME)
+
