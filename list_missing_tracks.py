@@ -97,7 +97,7 @@ def is_mix_type_conflict(mt1, mt2):
     Only blocks remix/edit vs neutral/blank.
     """
     NEUTRAL = [
-        'original mix', 'extended mix', 'club mix', 'radio edit',
+        'original mix', 'extended mix', 'club mix', 'club mix edit', 'radio edit', 'radio mix',
         'edit', 'version', 'mix', 'extended', 'original', 'extended club mix'
     ]
 
