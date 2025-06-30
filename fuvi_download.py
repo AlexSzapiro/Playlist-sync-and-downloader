@@ -72,14 +72,33 @@ def ensure_playlist_exists(driver, playlist_name):
 def sanitize_artist_name(name):
     return re.sub(r'\((ofc|be|uk|us|fr|it|ca|au|de)\)', '', name, flags=re.IGNORECASE).strip()
 
-def normalize_text(text, remove_suffix=False):
-    text = unidecode.unidecode(text)  # normalize accents
-    text = text.lower()
-    text = text.replace("&", "and").replace("’", "'").replace("‘", "'").replace("´", "'").replace("`", "'")
-    if remove_suffix:
-        text = re.sub(r"\((original|extended|club|radio|edit|mix|remix).*?\)", "", text)
-        text = re.sub(r"(original|extended|club|radio|edit|mix|remix)( version)?", "", text)
-    return re.sub(r"\s+", " ", text).strip()
+def normalize_text(text: str) -> str:
+    """
+    Removes neutral suffixes (Original Mix, Extended Mix, 12" Version, [1/3], etc.)
+    Handles both parentheses and plain at end. Normalizes all else.
+    """
+    # Remove [stuff] at end
+    t = re.sub(r'\s*\[[^\]]+\]\s*$', '', text)
+    # Remove neutral parens at end
+    t = re.sub(
+        r'\s*\((12[\'"]?\s*version|original (mix|version)|extended mix|club mix|radio edit|edit|dub mix|version|remaster(ed)?|20\d\d|mono|stereo)\)\s*$', 
+        '', t, flags=re.I)
+    # Remove neutral suffixes at end (with or without parens)
+    t = re.sub(
+        r'\b(12[\'"]?\s*version|original (mix|version)|extended mix|club mix|radio edit|edit|dub mix|version|remaster(ed)?|20\d\d|mono|stereo)\b\s*$', 
+        '', t, flags=re.I)
+    # Remove country suffixes
+    t = re.sub(r'\((ofc|be|uk|us|fr|it|ca|au|de)\)', '', t, flags=re.IGNORECASE)
+    # Normalize symbols
+    import unidecode
+    t = unidecode.unidecode(t)
+    t = re.sub(r'(?i)\b(feat|ft|featuring)\b', '', t)
+    t = t.replace('&', 'and')
+    t = re.sub(r'[^\w\s]', '', t)
+    t = re.sub(r'\s+', ' ', t)
+    return t.lower().strip()
+
+
 
 def string_similarity(a, b):
     return SequenceMatcher(None, a.lower(), b.lower()).ratio()
@@ -118,16 +137,15 @@ def search_and_add_track(driver, track_name, playlist_name, verbose=True):
             "//div[@role='rowgroup' and contains(@class, 'w-full')]/div[@role='row']"
         )
 
-        has_suffix = bool(re.search(r"\((original|extended|edit|club|radio|remix)", track_name.lower()))
-
         target_artists = track_name.split(" - ")[0] if " - " in track_name else ""
         target_title = track_name.split(" - ")[1] if " - " in track_name else ""
         
         target_perms = generate_artist_permutations(target_artists)
         search_variants = [
-            normalize_text(f"{perm} - {target_title}", remove_suffix=not has_suffix)
+            normalize_text(f"{perm} - {target_title}")
             for perm in target_perms
         ]
+
 
         best_match = None
         best_score = 0
@@ -136,17 +154,17 @@ def search_and_add_track(driver, track_name, playlist_name, verbose=True):
             try:
                 title_el = block.find_element(By.XPATH, ".//span[contains(@class, 'h3')]//a")
                 title = title_el.text.strip()
-
                 artists_el = block.find_elements(By.XPATH, ".//ul[contains(@class, 'list_virgule')]//a")
                 artists = ", ".join(sanitize_artist_name(a.text.strip()) for a in artists_el)
-
                 full_title = f"{artists} - {title}"
-                result_string = normalize_text(full_title, remove_suffix=not has_suffix)
+                normalized_result = normalize_text(full_title)
 
-                max_score = max(
-                    difflib.SequenceMatcher(None, variant, result_string).ratio()
-                    for variant in search_variants
-                )
+                candidate_scores = []
+                for variant in search_variants:
+                    score = difflib.SequenceMatcher(None, variant, normalized_result).ratio()
+                    candidate_scores.append((variant, score))
+
+                best_variant, max_score = max(candidate_scores, key=lambda x: x[1])
 
                 if verbose:
                     print(f"🎵 #{idx+1}: {full_title} (score: {round(max_score, 2)})")
@@ -157,6 +175,8 @@ def search_and_add_track(driver, track_name, playlist_name, verbose=True):
 
             except Exception as e:
                 print(f"⚠️ Error reading result #{idx+1}: {e}")
+
+        print(f"\nBEST SCORE FOUND: {best_score:.2f}")
 
         if not best_match or best_score < CONFIDENCE_THRESHOLD:
             print("❌ No suitable match found.")
@@ -233,9 +253,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # driver = create_driver()
-    # login(driver)
-    # ensure_playlist_exists(driver, PLAYLIST_NAME)
-    # search_and_add_track(driver, "El Mundo, Zazou - Like Forever (Hernan Cattaneo and Kevin Di Serna Remix)", PLAYLIST_NAME)
-    # search_and_add_track(driver, "FKA twigs - Eusexua (Anyma Remix)", PLAYLIST_NAME)
-
