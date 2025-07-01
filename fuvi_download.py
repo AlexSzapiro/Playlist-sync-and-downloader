@@ -11,7 +11,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from difflib import SequenceMatcher
-import difflib
 import unidecode
 
 # === CONFIGURATION ===
@@ -31,17 +30,17 @@ def create_driver():
 
 # === LOGIN ===
 def login(driver):
+    """Logs into FuviClan using credentials from .env."""
     driver.get(f"{FUVI_URL}/account/login")
     try:
         WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.ID, "email"))).click()
         ActionChains(driver).send_keys(USERNAME).perform()
-
         WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.ID, "password"))).click()
         ActionChains(driver).send_keys(PASSWORD).perform()
-
-        WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Connexion')]"))).click()
-
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '/dashboard/download-lists')]")))
+        WebDriverWait(driver, 10).until(EC.element_to_be_clickable(
+            (By.XPATH, "//button[contains(text(),'Connexion')]"))).click()
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located(
+            (By.XPATH, "//a[contains(@href, '/dashboard/download-lists')]")))
         print("✅ Logged in successfully.")
     except Exception as e:
         print("❌ Login failed:", e)
@@ -53,6 +52,7 @@ def login(driver):
 
 # === PLAYLIST CHECK ===
 def ensure_playlist_exists(driver, playlist_name):
+    """Ensures that the specified playlist exists before proceeding."""
     print("📂 Navigating to download lists...")
     driver.get(f"{FUVI_URL}/dashboard/download-lists")
     try:
@@ -70,27 +70,29 @@ def ensure_playlist_exists(driver, playlist_name):
 
 # === TEXT UTILS ===
 def sanitize_artist_name(name):
+    """Removes country tags from artist names."""
     return re.sub(r'\((ofc|be|uk|us|fr|it|ca|au|de)\)', '', name, flags=re.IGNORECASE).strip()
 
 def normalize_text(text: str) -> str:
     """
-    Removes neutral suffixes (Original Mix, Extended Mix, 12" Version, [1/3], etc.)
-    Handles both parentheses and plain at end. Normalizes all else.
+    Robust normalization:
+    - Removes neutral suffixes and country tags
+    - Standardizes 'remix', 'extended remix', '&', '+'
+    - Converts to ASCII, lowercases, strips punctuation and whitespace
     """
-    # Remove [stuff] at end
     t = re.sub(r'\s*\[[^\]]+\]\s*$', '', text)
-    # Remove neutral parens at end
+        # Remove neutral suffixes with or without parenthesis, including years and "rework"
     t = re.sub(
-        r'\s*\((12[\'"]?\s*version|original (mix|version)|extended mix|club mix|radio edit|edit|dub mix|version|remaster(ed)?|20\d\d|mono|stereo)\)\s*$', 
+        r'\s*\(((?:20\d{2}\s*)?(12[\'"]?\s*version|original (mix|version)|extended (mix|rework)|club mix|extended club mix|radio edit|edit|dub mix|version|rework|remaster(ed)?|mono|stereo))\)\s*$',
         '', t, flags=re.I)
-    # Remove neutral suffixes at end (with or without parens)
     t = re.sub(
-        r'\b(12[\'"]?\s*version|original (mix|version)|extended mix|club mix|radio edit|edit|dub mix|version|remaster(ed)?|20\d\d|mono|stereo)\b\s*$', 
+        r'\b((?:20\d{2}\s*)?(12[\'"]?\s*version|original (mix|version)|extended (mix|rework)|club mix|extended club mix|radio edit|edit|dub mix|version|rework|remaster(ed)?|mono|stereo))\b\s*$',
         '', t, flags=re.I)
-    # Remove country suffixes
+
     t = re.sub(r'\((ofc|be|uk|us|fr|it|ca|au|de)\)', '', t, flags=re.IGNORECASE)
-    # Normalize symbols
-    import unidecode
+    t = re.sub(r'\s*[\&\+]\s*', ' and ', t)
+    t = re.sub(r'\bextended remix\b', 'remix', t, flags=re.I)
+    t = re.sub(r'\bremix\b', 'remix', t, flags=re.I)
     t = unidecode.unidecode(t)
     t = re.sub(r'(?i)\b(feat|ft|featuring)\b', '', t)
     t = t.replace('&', 'and')
@@ -98,23 +100,32 @@ def normalize_text(text: str) -> str:
     t = re.sub(r'\s+', ' ', t)
     return t.lower().strip()
 
+def extract_remixers_from_title(title):
+    """
+    Extracts remixer(s) from titles like '(X Remix)' (X can include multiple names).
+    """
+    m = re.search(r'\((.+? remix)\)', title, flags=re.I)
+    if not m:
+        return []
+    remixers = m.group(1)
+    remixers = re.sub(r'remix', '', remixers, flags=re.I)
+    remixers = re.split(r'\s*,\s*|\s+and\s+|\s*&\s*|\s*\+\s*', remixers)
+    return [r.strip() for r in remixers if r.strip()]
 
-
-def string_similarity(a, b):
-    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
-
-def generate_artist_permutations(artist_segment):
-    artists = [a.strip() for a in artist_segment.split(",")]
-    if len(artists) <= 1:
-        return [artist_segment.strip()]
-    return [", ".join(p) for p in itertools.permutations(artists)]
+def generate_artist_permutations(artist_list):
+    """Generates all permutations of an artist list as comma-separated strings."""
+    if not artist_list:
+        return [""]
+    if len(artist_list) == 1:
+        return [artist_list[0].strip()]
+    return [", ".join(p) for p in itertools.permutations([a.strip() for a in artist_list])]
 
 # === MAIN TRACK LOGIC ===
 def search_and_add_track(driver, track_name, playlist_name, verbose=True):
     print(f"🔍 Scanning for: {track_name}")
 
     try:
-        driver.get("https://music.fuvi-clan.com/dashboard/library")
+        driver.get(f"{FUVI_URL}/dashboard/library")
 
         search_input = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.ID, "topbar-search"))
@@ -123,34 +134,40 @@ def search_and_add_track(driver, track_name, playlist_name, verbose=True):
         search_input.send_keys(track_name)
         search_input.send_keys(Keys.RETURN)
 
-        # Wait for rows to appear
         WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((
                 By.XPATH,
                 "//div[@role='rowgroup' and contains(@class, 'w-full')]/div[@role='row']"
             ))
         )
-        time.sleep(5) 
+        time.sleep(5)
 
         result_blocks = driver.find_elements(
             By.XPATH,
             "//div[@role='rowgroup' and contains(@class, 'w-full')]/div[@role='row']"
         )
 
+        # Parse track for matching
         target_artists = track_name.split(" - ")[0] if " - " in track_name else ""
         target_title = track_name.split(" - ")[1] if " - " in track_name else ""
-        
-        target_perms = generate_artist_permutations(target_artists)
+
+        remixers = extract_remixers_from_title(target_title)
+        base_artists_list = [a.strip() for a in target_artists.split(",")] if target_artists else []
+        full_artist_list = base_artists_list + [r for r in remixers if r.lower() not in [a.lower() for a in base_artists_list]]
+
+        perms_base = generate_artist_permutations(base_artists_list)
+        perms_with_remixers = generate_artist_permutations(full_artist_list)
+        all_perms = set(perms_base + perms_with_remixers)
+
         search_variants = [
             normalize_text(f"{perm} - {target_title}")
-            for perm in target_perms
+            for perm in all_perms
         ]
-
 
         best_match = None
         best_score = 0
 
-        for idx, block in enumerate(result_blocks[:5]):
+        for idx, block in enumerate(result_blocks[:3]):
             try:
                 title_el = block.find_element(By.XPATH, ".//span[contains(@class, 'h3')]//a")
                 title = title_el.text.strip()
@@ -161,7 +178,7 @@ def search_and_add_track(driver, track_name, playlist_name, verbose=True):
 
                 candidate_scores = []
                 for variant in search_variants:
-                    score = difflib.SequenceMatcher(None, variant, normalized_result).ratio()
+                    score = SequenceMatcher(None, variant, normalized_result).ratio()
                     candidate_scores.append((variant, score))
 
                 best_variant, max_score = max(candidate_scores, key=lambda x: x[1])
@@ -176,8 +193,6 @@ def search_and_add_track(driver, track_name, playlist_name, verbose=True):
             except Exception as e:
                 print(f"⚠️ Error reading result #{idx+1}: {e}")
 
-        print(f"\nBEST SCORE FOUND: {best_score:.2f}")
-
         if not best_match or best_score < CONFIDENCE_THRESHOLD:
             print("❌ No suitable match found.")
             return False
@@ -189,10 +204,8 @@ def search_and_add_track(driver, track_name, playlist_name, verbose=True):
                 ".//button[contains(@aria-label, 'Ajouter') and contains(@aria-label, 'MP3')]"
             )
             driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'})", add_btn)
-            #time.sleep(1)
             add_btn.click()
 
-            # Wait for playlist modal
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'modal')]"))
             )
@@ -221,7 +234,6 @@ def search_and_add_track(driver, track_name, playlist_name, verbose=True):
     except Exception as e:
         print(f"❌ Search failed for {track_name}: {e}")
         return False
-
 
 # === MAIN LOOP ===
 def main():
