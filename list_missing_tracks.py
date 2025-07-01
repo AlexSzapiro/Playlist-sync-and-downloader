@@ -98,7 +98,7 @@ def is_mix_type_conflict(mt1, mt2):
     """
     NEUTRAL = [
         'original mix', 'extended mix', 'club mix', 'club mix edit', 'radio edit', 'radio mix',
-        'edit', 'version', 'mix', 'extended', 'original', 'extended club mix'
+        'edit', 'version', 'mix', 'extended', 'original', 'extended club mix', 'original club mix',
     ]
 
     mt1 = (mt1 or '').lower()
