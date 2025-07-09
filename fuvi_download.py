@@ -44,9 +44,7 @@ def login(driver):
         print("✅ Logged in successfully.")
     except Exception as e:
         print("❌ Login failed:", e)
-        with open("fuvi_login_debug.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
-        input("🔍 Check 'fuvi_login_debug.html'. Press Enter to exit.")
+        input("Press Enter to exit.")
         driver.quit()
         exit(1)
 
